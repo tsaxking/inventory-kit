@@ -35,6 +35,12 @@ export namespace Rental {
         },
     });
 
+    Quote.callListen('quote-to-invoice', async (quote) => {
+        return {
+            success: true,
+        }
+    });
+
     export const quoteToInvoice = (quote: QuoteData) => {
         return attemptAsync(async () => {
             const invoice = await Invoice.new({

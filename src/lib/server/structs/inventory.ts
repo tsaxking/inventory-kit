@@ -31,7 +31,6 @@ export namespace Inventory {
             image: text('image').notNull(),
             rentable: boolean('rentable').notNull(),
             rentPrice: integer('rent_price').notNull(), // pennies
-            state: text('state').notNull(), // available, rented, lost, damaged
         },
     });
 
