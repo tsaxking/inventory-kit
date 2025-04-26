@@ -79,22 +79,27 @@
 	<div class="row">
 		<div class="col">
 			<div class="d-flex align-items-center">
-
-				<button type="button" class="btn btn-secondary"
-				disabled={page === 1}
-				onclick={() => search({ accountId, type, dataId, struct, message, page: page - 1, limit })}
-			>
-				<i class="material-icons">arrow_back</i>
-			</button>
-			<h5 class="mx-3 mb-0">
-				Page {page} of {Math.ceil(count / limit)}
-			</h5>
-			<button type="button" class="btn btn-secondary"
-				disabled={page * limit >= count}
-				onclick={() => search({ accountId, type, dataId, struct, message, page: page + 1, limit })}
-			>
-				<i class="material-icons">arrow_forward</i>
-			</button>
+				<button
+					type="button"
+					class="btn btn-secondary"
+					disabled={page === 1}
+					onclick={() =>
+						search({ accountId, type, dataId, struct, message, page: page - 1, limit })}
+				>
+					<i class="material-icons">arrow_back</i>
+				</button>
+				<h5 class="mx-3 mb-0">
+					Page {page} of {Math.ceil(count / limit)}
+				</h5>
+				<button
+					type="button"
+					class="btn btn-secondary"
+					disabled={page * limit >= count}
+					onclick={() =>
+						search({ accountId, type, dataId, struct, message, page: page + 1, limit })}
+				>
+					<i class="material-icons">arrow_forward</i>
+				</button>
 			</div>
 		</div>
 	</div>
@@ -107,32 +112,32 @@
 					class="form-control"
 					placeholder="Account ID"
 					value={accountId || ''}
-					onchange={(e) => search({ accountId: e.currentTarget.value, type, dataId, struct, message, page: 1, limit })}
+					onchange={(e) =>
+						search({
+							accountId: e.currentTarget.value,
+							type,
+							dataId,
+							struct,
+							message,
+							page: 1,
+							limit
+						})}
 				/>
-				<select class="form-control" onchange={(e) => {
-					const value = e.currentTarget.value ? e.currentTarget.value : undefined;
-					search({ accountId, type: value, dataId, struct, message, page: 0, limit });
-				}}>
-					<option value="" selected={type === undefined}>
-						All
-					</option>
-					<option value="create" selected={type === 'create'}>
-						Create
-					</option>
-					<option value="delete" selected={type === 'delete'}>
-						Delete
-					</option>
-					<option value="update" selected={type === 'update'}>
-						Update
-					</option>
-					
-					<option value="archive" selected={type === 'archive'}>
-						Archive
-					</option>
+				<select
+					class="form-control"
+					onchange={(e) => {
+						const value = e.currentTarget.value ? e.currentTarget.value : undefined;
+						search({ accountId, type: value, dataId, struct, message, page: 0, limit });
+					}}
+				>
+					<option value="" selected={type === undefined}> All </option>
+					<option value="create" selected={type === 'create'}> Create </option>
+					<option value="delete" selected={type === 'delete'}> Delete </option>
+					<option value="update" selected={type === 'update'}> Update </option>
 
-					<option value="restore" selected={type === 'restore'}>
-						Restore
-					</option>
+					<option value="archive" selected={type === 'archive'}> Archive </option>
+
+					<option value="restore" selected={type === 'restore'}> Restore </option>
 
 					<option value="restore-version" selected={type === 'restore-version'}>
 						Restore Version
@@ -146,14 +151,32 @@
 					class="form-control"
 					placeholder="Data ID"
 					value={dataId || ''}
-					onchange={(e) => search({ accountId, type, dataId: e.currentTarget.value, struct, message, page: 1, limit })}
+					onchange={(e) =>
+						search({
+							accountId,
+							type,
+							dataId: e.currentTarget.value,
+							struct,
+							message,
+							page: 1,
+							limit
+						})}
 				/>
 				<input
 					type="text"
 					class="form-control"
 					placeholder="Message"
 					value={message || ''}
-					onchange={(e) => search({ accountId, type, dataId, struct, message: e.currentTarget.value, page: 1, limit })}
+					onchange={(e) =>
+						search({
+							accountId,
+							type,
+							dataId,
+							struct,
+							message: e.currentTarget.value,
+							page: 1,
+							limit
+						})}
 				/>
 			</div>
 		</div>
@@ -161,47 +184,49 @@
 	<div class="row mb-3">
 		<div class="table-responsive">
 			{#key logs}
-			<table class="table">
-				<thead>
-					<tr>
-						<th>Row</th>
-						<th>Time</th>
-						<th>Account</th>
-						<th>Type</th>
-						<th>Data ID</th>
-						<th>Struct</th>
-						<th>Message</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each logs as log, i}
+				<table class="table">
+					<thead>
 						<tr>
-							<td>{(page - 1) * limit + i + 1}</td>
-							<td>
-								{dateTime(log.created)}
-							</td>
-							<td
-								title={log.accountId}
-								class="cursor-pointer"
-								onclick={() => copy(log.accountId, true)}
-								>{log.account?.username || log.accountId}</td
-							>
-							<td
-								>{log.type}</td
-							>
-							<td title={JSON.stringify(log.data, null, 4)} class="cursor-pointer" onclick={() => copy(log.dataId, true)}
-								>{abbreviate(log.dataId)}</td
-							>
-							<td title={log.struct} class="cursor-pointer" onclick={() => copy(log.struct, true)}
-								>{capitalize(fromSnakeCase(log.struct))}</td
-							>
-							<td title={log.message} class="cursor-pointer" onclick={() => copy(log.message, true)}
-								>{log.message}</td
-							>
+							<th>Row</th>
+							<th>Time</th>
+							<th>Account</th>
+							<th>Type</th>
+							<th>Data ID</th>
+							<th>Struct</th>
+							<th>Message</th>
 						</tr>
-					{/each}
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{#each logs as log, i}
+							<tr>
+								<td>{(page - 1) * limit + i + 1}</td>
+								<td>
+									{dateTime(log.created)}
+								</td>
+								<td
+									title={log.accountId}
+									class="cursor-pointer"
+									onclick={() => copy(log.accountId, true)}
+									>{log.account?.username || log.accountId}</td
+								>
+								<td>{log.type}</td>
+								<td
+									title={JSON.stringify(log.data, null, 4)}
+									class="cursor-pointer"
+									onclick={() => copy(log.dataId, true)}>{abbreviate(log.dataId)}</td
+								>
+								<td title={log.struct} class="cursor-pointer" onclick={() => copy(log.struct, true)}
+									>{capitalize(fromSnakeCase(log.struct))}</td
+								>
+								<td
+									title={log.message}
+									class="cursor-pointer"
+									onclick={() => copy(log.message, true)}>{log.message}</td
+								>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			{/key}
 		</div>
 	</div>

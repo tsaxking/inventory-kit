@@ -64,19 +64,19 @@ export namespace Logs {
 		return attemptAsync(async () => {
 			const parseConditions = (column: any, value: string | null | undefined) => {
 				if (!value) return undefined;
-	
-				const parts = value.split("&"); // Handle multiple conditions
+
+				const parts = value.split('&'); // Handle multiple conditions
 				const includes: any[] = [];
 				const excludes: any[] = [];
-	
+
 				for (const part of parts) {
-					if (part.startsWith("!")) {
+					if (part.startsWith('!')) {
 						excludes.push(not(like(column, part.slice(1))));
 					} else {
 						includes.push(like(column, part));
 					}
 				}
-	
+
 				// Combine NOT and AND conditions
 				if (includes.length > 0 && excludes.length > 0) {
 					return and(...includes, ...excludes);
@@ -86,7 +86,7 @@ export namespace Logs {
 					return and(...excludes);
 				}
 			};
-	
+
 			const condition = and(
 				parseConditions(Log.table.accountId, config.accountId),
 				parseConditions(Log.table.type, config.type),
@@ -94,23 +94,22 @@ export namespace Logs {
 				parseConditions(Log.table.struct, config.struct),
 				parseConditions(Log.table.message, config.message)
 			);
-	
+
 			const res = await DB.select()
 				.from(Log.table)
 				.where(condition)
 				.limit(config.limit)
 				.orderBy(sql`${Log.table.created}::timestamptz DESC`)
 				.offset(config.offset);
-	
+
 			const count = await DB.select()
 				.from(Log.table)
 				.where(condition)
 				.then((r) => r.length);
-	
+
 			return { logs: res.map((l) => Log.Generator(l)), count };
 		});
 	};
-	
 }
 
 export const _logTable = Logs.Log.table;

@@ -35,3 +35,5 @@ backups/
 **/entitlements/*.yaml
 
 *.log
+
+pdfs/*.pdf
