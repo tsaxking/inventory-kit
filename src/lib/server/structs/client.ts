@@ -2,8 +2,8 @@ import { integer, text } from 'drizzle-orm/pg-core';
 import { Struct } from 'drizzle-struct/back-end';
 
 export namespace Client {
-	export const Client = new Struct({
-		name: 'clients',
+	export const Organization = new Struct({
+		name: 'organizations',
 		structure: {
 			name: text('name').notNull(),
 			email: text('email').notNull(),
@@ -35,5 +35,5 @@ export namespace Client {
 	});
 }
 
-export const _client = Client.Client.table;
+export const _client = Client.Organization.table;
 export const _clientContact = Client.ClientContact.table;

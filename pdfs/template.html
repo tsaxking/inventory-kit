@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
+    <style>
+        @page {
+            margin: 0;
+            padding: 0;
+            size: A4;
+        }
+        @media print, screen {
+            body {
+                margin: 0;
+                padding: 0;
+            }
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .page:first-child {
+            page-break-before: auto;
+            break-before: auto;
+        }
+        :root {
+            --primary: #4285f4;
+            --secondary: #db4437;
+            --tertiary: #f4b400;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .col {
+            flex: 1;
+        }
+        .text-end {
+            text-align: right;
+        }
+
+        .section-title {
+            font-weight: bold;
+            color: #4285f4;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .section-content {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .section-content-description {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .line {
+            border-top: 1px solid #ccc;
+            margin: 20px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            color: var(--primary);
+        }
+        td, th {
+            padding: 8px;
+            border-bottom: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <repeat id="pages">
+        <file id="page" src="./components/page.html" />
+    </repeat>
+</body>
+</html>

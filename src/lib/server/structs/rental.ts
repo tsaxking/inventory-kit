@@ -1,14 +1,10 @@
-import { boolean, integer, text } from 'drizzle-orm/pg-core';
+import { integer, text } from 'drizzle-orm/pg-core';
 import { Struct } from 'drizzle-struct/back-end';
 import { attemptAsync } from 'ts-utils/check';
-import { z } from 'zod';
-import terminal from '../utils/terminal';
-import pdf from 'html-pdf-node';
 import { Client } from './client';
 import { cost } from 'ts-utils/text';
-import { Pdf } from '../utils/pdfs';
-import { dateString } from 'ts-utils/clock';
-import { COMPANY_NAME, COMPANY_EMAIL, COMPANY_PHONE, COMPANY_TAX_ID, COMPANY_TITLE } from '$env/static/private';
+import { PDF } from '../utils/pdfs';
+const { COMPANY_TAX_ID } = process.env;
 
 export namespace Rental {
 	export enum ProjectStatus {
@@ -25,6 +21,20 @@ export namespace Rental {
 		CANCELLED = 'cancelled'
 	}
 
+	export enum ProjectItemType {
+		SERIALIZED = 'serialized',
+		BULK = 'bulk',
+		GROUP = 'group',
+		CUSTOM = 'custom'
+	}
+
+	export enum ProjectItemStatus {
+		CONFIRMED = 'confirmed',
+		PREPPED = 'prepped',
+		ON_LOCATION = 'on_location',
+		RETURNED = 'returned',
+	}
+
 	export const Project = new Struct({
 		name: 'projects',
 		structure: {
@@ -39,8 +49,13 @@ export namespace Rental {
 			planningEndDate: text('planning_end_date').notNull(),
 			status: text('status').notNull(), // planning, invoiced, paid, cancelled
 			notes: text('notes').notNull()
+		},
+		validators: {
+			status: (status) => typeof status === 'string' && Object.values(ProjectStatus).includes(status as ProjectStatus),
 		}
 	});
+
+	export type ProjectData = typeof Project.sample;
 
 	export const Quote = new Struct({
 		name: 'quotes',
@@ -54,10 +69,6 @@ export namespace Rental {
 	});
 	export type QuoteData = typeof Quote.sample;
 
-	Quote.on('delete', async (q) => {
-		QuoteItem.fromProperty('quoteId', q.id, { type: 'stream' }).pipe((qi) => qi.delete());
-	});
-
 	export const Invoice = new Struct({
 		name: 'invoices',
 		structure: {
@@ -65,279 +76,243 @@ export namespace Rental {
 			taxRate: integer('tax_rate').notNull(), // percentage
 			discount: integer('discount').notNull(), // percentage
 			dueDate: text('due_date').notNull(),
-			date: text('date').notNull(),
+			status: text('status').notNull(), // pending, paid, cancelled
+		},
+		validators: {
+			status: (status) => typeof status === 'string' && Object.values(InvoiceStatus).includes(status as InvoiceStatus),
 		}
 	});
 	export type InvoiceData = typeof Invoice.sample;
 
-	Invoice.on('delete', async (i) => {
-		InvoiceItem.fromProperty('invoiceId', i.id, { type: 'stream' }).pipe((ii) => ii.delete());
+
+	export const ProjectItem = new Struct({
+		name: 'project_items',
+		structure: {
+			projectId: text('project_id').notNull(),
+			type: text('type').notNull(), // serialized, bulk, group, or custom
+			itemId: text('item_id').notNull(), // reference to the item in the inventory, blank if custom
+		
+			// these will be populated from the item/group if it exists, they can be overridden without changing the original data
+			// If overridden, the itemId will still be used to reference the item in the inventory
+			// The user will have to manually check "custom" in the UI to remove the itemId reference
+			name: text('name').notNull(),
+			description: text('description').notNull(),
+			rentPrice: integer('rent_price').notNull(),
+			status: text('status').notNull(), // ProjectItemStatus
+			// rent price is multiplied by quantity
+			quantity: integer('quantity').notNull(), // if bulk or custom, otherwise 1
+			discount: integer('discount').notNull(), // percentage - multiplies the rent price
+		},
+		validators: {
+			type: (type) => typeof type === 'string' && Object.values(ProjectItemType).includes(type as ProjectItemType),
+			status: (status) => typeof status === 'string' && Object.values(ProjectItemStatus).includes(status as ProjectItemStatus),
+		}
 	});
 
-	Quote.callListen('quote-to-invoice', async (event, data) => {
-		const parsed = z
-			.object({
-				quoteId: z.string()
-			})
-			.safeParse(data);
-		if (!parsed.success) {
-			terminal.error('Invalid data for quote-to-invoice', parsed.error);
-			return {
-				success: false,
-				message: 'Invalid data'
-			};
-		}
+	export type ProjectItemData = typeof ProjectItem.sample;
 
-		const quote = await Quote.fromId(parsed.data.quoteId).unwrap();
-		if (!quote) {
-			terminal.error('Quote not found', parsed.data.quoteId);
-			return {
-				success: false,
-				message: 'Quote not found'
-			};
-		}
-
-		await quoteToInvoice(quote).unwrap();
-
-		return {
-			success: true
-		};
-	});
-
-	export const quoteToInvoice = (quote: QuoteData) => {
+	export const generateInvoice = (project: ProjectData, config: {
+		showDiscount: boolean;
+		ownerName: string;
+		ownerTitle: string;
+		ownerEmail: string;
+		ownerPhone: string;
+		taxRate: number;
+	}) => {
 		return attemptAsync(async () => {
-			const invoice = await Invoice.new(
-				{
-					...quote.data,
-					created: new Date().toISOString(),
-					updated: new Date().toISOString()
-				},
-				{
-					overwriteGlobals: true
-				}
-			).unwrap();
+			const invoices = await Invoice.all({ type: 'count' }).unwrap();
+			const due = new Date();
+			due.setDate(due.getDate() + 30); // 30 days from now
+			const invoice = await Invoice.new({
+				projectId: project.id,
+				taxRate: config.taxRate,
+				discount: config.showDiscount ? config.taxRate : 0,
+				dueDate: due.toISOString(),
+				status: InvoiceStatus.PENDING,
+			}).unwrap();
+			const client = await Client.Organization.fromId(project.data.clientId).unwrap();
+			const contact = await Client.ClientContact.fromId(project.data.contactId).unwrap();
+			if (!client || !contact) {
+				throw new Error('Client or contact not found');
+			}
 
-			// Copy all items from quote to invoice
-			await QuoteItem.fromProperty('quoteId', quote.id, {
-				type: 'stream'
-			}).pipe(async (item) => {
-				await InvoiceItem.new({
-					...item.data,
-					invoiceId: invoice.id
-				}).unwrap();
+			const template = new PDF.Template(invoice.id);
+
+			const title = new PDF.InvoiceQuoteTitle({
+				title: 'Invoice',
+				ownerName: config.ownerName,
+				ownerEmail: config.ownerEmail,
+				ownerPhone: config.ownerPhone,
 			});
+
+			const description = new PDF.InvoiceQuoteDescription({
+				type: 'Invoice',
+				client: client.data.name,
+				description: project.data.description,
+				date: new Date().toLocaleDateString('en-US', {
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit'
+				}),
+				number: invoices + 1,
+			});
+
+			const items = await ProjectItem.fromProperty('projectId', project.id, { type: 'all' }).unwrap();
+			const itemList = new PDF.ItemList({
+				showDiscount: config.showDiscount,
+				items: items.map(i => ({
+					description: i.data.name,
+					unitPrice: cost(i.data.rentPrice),
+					quantity: i.data.quantity.toString(),
+					subtotal: cost((i.data.rentPrice * i.data.quantity) * (config.showDiscount ? (1 - i.data.discount / 100) : 1)),
+					discount: config.showDiscount ? cost(i.data.rentPrice * i.data.quantity * (i.data.discount / 100)) : '', // only show if discount is applied
+				}))
+			});
+			const terms = new PDF.InvoiceTerms({
+				invoiceDate: new Date().toLocaleDateString('en-US', {
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit'
+				}),
+				ownerName: config.ownerName,
+				ownerTaxId: String(COMPANY_TAX_ID),
+				invoiceNumber: invoices + 1,
+			});
+
+
+			const signatories = new PDF.Signatories({
+				ownerName: config.ownerName,
+				ownerTitle: config.ownerTitle,
+				clientName: contact.data.name,
+				clientTitle: client.data.name,
+			});
+
+			const subtotalAmount = items.reduce((acc, i) => {
+				return acc + (i.data.rentPrice * i.data.quantity) * (config.showDiscount ? (1 - i.data.discount / 100) : 1);
+			}, 0);
+			const taxAmount = subtotalAmount * (config.taxRate / 100);
+			const totalAmount = subtotalAmount + taxAmount;
+
+			const totals = new PDF.InvoiceTotals({
+				subtotalAmount: cost(subtotalAmount),
+				taxRate: config.taxRate + '%',
+				taxAmount: cost(taxAmount),
+				total: cost(totalAmount),
+				showDiscount: config.showDiscount,
+				discountRate: config.showDiscount ? config.taxRate + '%' : '',
+				discountAmount: config.showDiscount ? cost(subtotalAmount * (config.taxRate / 100)) : '',
+			});
+
+			template.addPage(new PDF.Container([
+				title,
+				description,
+				itemList,
+				totals,
+				PDF.LINE,
+				terms,
+				signatories
+			]));
+			
+			await template.save().unwrap();
+
+			await project.update({
+				status: ProjectStatus.INVOICED,
+			}).unwrap();
 
 			return invoice;
 		});
 	};
 
-	export const QuoteItem = new Struct({
-		name: 'quote_items',
-		structure: {
-			quoteId: text('quote_id').notNull(),
-			// Can be an item, group, or custom
-			itemId: text('item_id').notNull(),
-			groupId: text('group_id').notNull(),
-			// Name, description, and price are all pulled from itemId, or custom
-			name: text('name').notNull(),
-			description: text('description').notNull(),
-			price: integer('price').notNull(), // pennies
-			discount: integer('discount').notNull(), // percentage
-			quantity: integer('quantity').notNull()
-		}
-	});
-
-	export const InvoiceItem = new Struct({
-		name: 'invoice_items',
-		structure: {
-			invoiceId: text('invoice_id').notNull(),
-			// Can be an item, group, or custom
-			itemId: text('item_id').notNull(),
-			groupId: text('group_id').notNull(),
-			// Name, description, and price are all pulled from itemId, or custom
-			name: text('name').notNull(),
-			description: text('description').notNull(),
-			price: integer('price').notNull(), // pennies
-			discount: integer('discount').notNull(), // percentage
-			quantity: integer('quantity').notNull()
-		}
-	});
-
-	export const InvoicePdfs = new Struct({
-		name: 'invoice_pdfs',
-		structure: {
-			invoiceId: text('invoice_id').notNull(),
-			name: text('name').notNull(),
-			type: text('type').notNull(), // invoice or quote
-			status: text('status').notNull(), // pending, paid, cancelled
-			opened: boolean('opened').notNull(), // if the pdf has been opened
-		},
-	});
-
-	export const QuotePdfs = new Struct({
-		name: 'quote_pdfs',
-		structure: {
-			quoteId: text('quote_id').notNull(),
-			name: text('name').notNull(),
-			type: text('type').notNull(), // invoice or quote
-			status: text('status').notNull(), // pending, paid, cancelled
-			opened: boolean('opened').notNull(), // if the pdf has been opened
-		},
-	});
-
-	export const generateInvoicePdf = (invoice: InvoiceData) => {
+	export const generateQuote = (project: ProjectData, config: {
+		showDiscount: boolean;
+		ownerName: string;
+		ownerTitle: string;
+		ownerEmail: string;
+		ownerPhone: string;
+		taxRate: number;
+	}) => {
 		return attemptAsync(async () => {
-			const numInvoices = (await InvoicePdfs.all({ type: 'count' })).unwrap();
-			const project = await Project.fromId(invoice.data.projectId).unwrap();
-			if (!project) {
-				terminal.error('Project not found', invoice.data.projectId);
-				throw new Error('Project not found');
-			}
-
-			const client = await Client.Client.fromId(project.data.clientId).unwrap();
-			if (!client) {
-				terminal.error('Client not found', project.data.clientId);
-				throw new Error('Client not found');
-			}
-			const contact = await Client.ClientContact.fromId(project.data.contactId).unwrap();
-			if (!contact) {
-				terminal.error('Contact not found', project.data.contactId);
-				throw new Error('Contact not found');
-			}
-
-
-			const items = await InvoiceItem.fromProperty('invoiceId', invoice.id, {
-				type: 'stream',
-			}).await().unwrap();
-
-			const pdfItems = items.map(item => ({
-				description: item.data.name,
-				unitPrice: cost(item.data.price),
-				quantity: item.data.quantity.toString(),
-				discount: item.data.discount ? `${item.data.discount}%` : undefined,
-				subtotal: cost(item.data.price * item.data.quantity * (1 - (item.data.discount / 100))),
-			}));
-			const subtotal = items.reduce((acc, item) => acc + item.data.price * item.data.quantity * (1 - (item.data.discount / 100)), 0);
-			const discount = invoice.data.discount ? (subtotal * invoice.data.discount) / 100 : 0;
-			const subtotalWithDiscount = subtotal - discount;
-			const tax = (subtotalWithDiscount * invoice.data.taxRate) / 100;
-			const total = subtotalWithDiscount + tax;
-
-			const invoicePdf = await InvoicePdfs.new({
-				invoiceId: invoice.id,
-				name: `${project.data.name} - Invoice ${numInvoices + 1}`,
-				type: 'invoice',
-				opened: false,
-				status: InvoiceStatus.PENDING,
+			const quotes = await Quote.all({ type: 'count' }).unwrap();
+			const due = new Date();
+			due.setDate(due.getDate() + 30); // 30 days from now
+			const quote = await Quote.new({
+				projectId: project.id,
+				taxRate: config.taxRate,
+				discount: config.showDiscount ? config.taxRate : 0,
+				dueDate: due.toISOString(),
+				date: new Date().toLocaleDateString('en-US', {
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit'
+				}),
 			}).unwrap();
-
-
-			const pdf = new Pdf(
-				invoicePdf.id, 
-				discount || items.filter(i => i.data.discount).length ? 'invoice-with-discount' : 'invoice-no-discount',
-				{
-					client: client.data.name,
-					invoiceOrQuote: 'Invoice',
-					invoiceNumber: numInvoices + 1,
-					description: project.data.description,
-					date: dateString('MM-DD-YYYY')(new Date(invoice.data.date)),
-					dueDate: dateString('MM-DD-YYYY')(new Date(invoice.data.dueDate)),
-					items: pdfItems,
-					subtotalAmount: cost(subtotal),
-					taxRate: `${invoice.data.taxRate}%`,
-					taxAmount: cost(tax),
-					total: cost(total),
-					ownerName: COMPANY_NAME,
-					ownerEmail: COMPANY_EMAIL,
-					ownerPhone: COMPANY_PHONE,
-					ownerTaxId: COMPANY_TAX_ID,
-					ownerTitle: COMPANY_TITLE,
-					clientTitle: contact.data.title,
-					totalDiscount: discount ? cost(discount) : undefined,
-				}
-			);
-
-			await pdf.save().unwrap();
-			return pdf.filePath;
-		});
-	};
-
-	export const generateQuotePdf = (quote: QuoteData) => {
-		return attemptAsync(async () => {
-			const numQuotes = (await QuotePdfs.all({ type: 'count' })).unwrap();
-			const project = await Project.fromId(quote.data.projectId).unwrap();
-			if (!project) {
-				terminal.error('Project not found', quote.data.projectId);
-				throw new Error('Project not found');
-			}
-
-			const client = await Client.Client.fromId(project.data.clientId).unwrap();
-			if (!client) {
-				terminal.error('Client not found', project.data.clientId);
-				throw new Error('Client not found');
-			}
+			const client = await Client.Organization.fromId(project.data.clientId).unwrap();
 			const contact = await Client.ClientContact.fromId(project.data.contactId).unwrap();
-			if (!contact) {
-				terminal.error('Contact not found', project.data.contactId);
-				throw new Error('Contact not found');
+			if (!client || !contact) {
+				throw new Error('Client or contact not found');
 			}
-			const items = await QuoteItem.fromProperty('quoteId', quote.id, {
-				type: 'stream',
-			}).await().unwrap();
-			const pdfItems = items.map(item => ({
-				description: item.data.name,
-				unitPrice: cost(item.data.price),
-				quantity: item.data.quantity.toString(),
-				discount: item.data.discount ? `${item.data.discount}%` : undefined,
-				subtotal: cost(item.data.price * item.data.quantity * (1 - (item.data.discount / 100))),
-			}));
-			const subtotal = items.reduce((acc, item) => acc + item.data.price * item.data.quantity * (1 - (item.data.discount / 100)), 0);
-			const discount = quote.data.discount ? (subtotal * quote.data.discount) / 100 : 0;
-			const subtotalWithDiscount = subtotal - discount;
-			const tax = (subtotalWithDiscount * quote.data.taxRate) / 100;
-			const total = subtotalWithDiscount + tax;
-			const quotePdf = await QuotePdfs.new({
-				quoteId: quote.id,
-				name: `${project.data.name} - Quote ${numQuotes + 1}`,
-				type: 'quote',
-				opened: false,
-				status: InvoiceStatus.PENDING,
-			}).unwrap();
-			const pdf = new Pdf(
-				quotePdf.id,
-				discount || items.filter(i => i.data.discount).length ? 'invoice-with-discount' : 'invoice-no-discount',
-				{
-					client: client.data.name,
-					invoiceOrQuote: 'Quote',
-					invoiceNumber: numQuotes + 1,
-					description: project.data.description,
-					date: dateString('MM-DD-YYYY')(new Date(quote.data.date)),
-					dueDate: dateString('MM-DD-YYYY')(new Date(quote.data.dueDate)),
-					items: pdfItems,
-					subtotalAmount: cost(subtotal),
-					taxRate: `${quote.data.taxRate}%`,
-					taxAmount: cost(tax),
-					total: cost(total),
-					ownerName: COMPANY_NAME,
-					ownerEmail: COMPANY_EMAIL,
-					ownerPhone: COMPANY_PHONE,
-					ownerTaxId: COMPANY_TAX_ID,
-					ownerTitle: COMPANY_TITLE,
-					clientTitle: contact.data.title,	
-					totalDiscount: discount ? cost(discount) : undefined,
-				}
-			);
-			await pdf.save().unwrap();
-			return pdf.filePath;
+
+			const template = new PDF.Template(quote.id);
+
+			const title = new PDF.InvoiceQuoteTitle({
+				title: 'Quote',
+				ownerName: config.ownerName,
+				ownerEmail: config.ownerEmail,
+				ownerPhone: config.ownerPhone,
+			});
+
+			const description = new PDF.InvoiceQuoteDescription({
+				type: 'Quote',
+				client: client.data.name,
+				description: project.data.description,
+				date: new Date().toLocaleDateString('en-US', {
+					year: 'numeric',
+					month: '2-digit',
+					day: '2-digit'
+				}),
+				number: quotes + 1,
+			});
+
+			const items = await ProjectItem.fromProperty('projectId', project.id, { type: 'all' }).unwrap();
+			const itemList = new PDF.ItemList({
+				showDiscount: config.showDiscount,
+				items: items.map(i => ({
+					description: i.data.name,
+					unitPrice: cost(i.data.rentPrice),
+					quantity: i.data.quantity.toString(),
+					subtotal: cost((i.data.rentPrice * i.data.quantity) * (config.showDiscount ? (1 - i.data.discount / 100) : 1)),
+					discount: config.showDiscount ? cost(i.data.rentPrice * i.data.quantity * (i.data.discount / 100)) : '', // only show if discount
+				}))
+			});
+			const subtotalAmount = items.reduce((acc, i) => {
+				return acc + (i.data.rentPrice * i.data.quantity) * (config.showDiscount ? (1 - i.data.discount / 100) : 1);
+			}
+			, 0);	
+			const taxAmount = subtotalAmount * (config.taxRate / 100);
+			const totalAmount = subtotalAmount + taxAmount;
+			const totals = new PDF.InvoiceTotals({
+				subtotalAmount: cost(subtotalAmount),	
+				taxRate: config.taxRate + '%',
+				taxAmount: cost(taxAmount),
+				total: cost(totalAmount),
+				showDiscount: config.showDiscount,
+				discountRate: config.showDiscount ? config.taxRate + '%' : '',
+				discountAmount: config.showDiscount ? cost(subtotalAmount * (config.taxRate / 100)) : '',
+			});
+			template.addPage(new PDF.Container([
+				title,
+				description,
+				itemList,
+				totals,
+				PDF.LINE,
+			]));
+			await template.save().unwrap();
+
+			return quote;
 		});
 	};
 }
 
-
 export const _project = Rental.Project.table;
 export const _quote = Rental.Quote.table;
 export const _invoice = Rental.Invoice.table;
-export const _quoteItem = Rental.QuoteItem.table;
-export const _invoiceItem = Rental.InvoiceItem.table;
-export const _invoicePdfs = Rental.InvoicePdfs.table;
-export const _quotePdfs = Rental.QuotePdfs.table;

@@ -3,108 +3,225 @@ import fs from "fs/promises";
 import path from "path";
 import { render } from "html-constructor";
 import puppeteer from 'puppeteer';
-import terminal from "./terminal";
 
-class PdfError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'PdfError';
-        terminal.error('PdfError:', message);
-    }
-}
+export namespace PDF {
+    const cache = new Map<string, string>();
 
-export type PdfConstructors = {
-    'invoice-no-discount': {
-        invoiceOrQuote: 'Invoice' | 'Quote';
-        ownerName: string;
-        ownerEmail: string;
-        ownerPhone: string;
-        client: string;
-        invoiceNumber: number;
-        description: string;
-        date: string;
-        dueDate: string;
-        items: {
-            description?: string;
-            unitPrice?: string;
-            quantity?: string;
-            subtotal?: string;
-        }[];
-        subtotalAmount: string;
-        taxRate: string;
-        taxAmount: string;
-        total: string;
-        ownerTaxId: string;
-        clientTitle: string;
-        ownerTitle: string;
-    };
-    'invoice-with-discount': {
-        invoiceOrQuote: 'Invoice' | 'Quote';
-        ownerName: string;
-        ownerEmail: string;
-        ownerPhone: string;
-        client: string;
-        invoiceNumber: number;
-        description: string;
-        date: string;
-        dueDate: string;
-        items: {
-            description?: string;
-            unitPrice?: string;
-            quantity?: string;
-            subtotal?: string;
-            discount?: string;
-        }[];
-        subtotalAmount: string;
-        taxRate: string;
-        taxAmount: string;
-        total: string;
-        ownerTaxId: string;
-        clientTitle: string;
-        ownerTitle: string;
-        totalDiscount: string;
-    };
-};
-
-const filename = (name: string) => path.resolve(process.cwd(), 'static', 'uploads', `${name}.pdf`);
-
-export class Pdf<T extends keyof PdfConstructors> {
-    public static open(name: string) {
-        return attemptAsync(() => fs.readFile(filename(name)));
-    }
-
-    constructor(public readonly name: string, public readonly doc: T, public readonly data: PdfConstructors[T]) {}
-
-    private __generated: Uint8Array<ArrayBufferLike> | null = null;
-    generate() {
+    const openHTML = (name: string) => {
         return attemptAsync(async () => {
-            if (this.__generated) {
-                return this.__generated;
+            if (cache.has(name)) {
+                return String(cache.get(name));
             }
-            const html = await fs.readFile(path.resolve(process.cwd(), 'pdfs', `${this.doc}.html`), 'utf-8');
-            const browser = await puppeteer.launch();
-            const page = await browser.newPage();
-            await page.setContent(render(html, this.data), { waitUntil: 'networkidle2' });
-            const pdf = await page.pdf({
-                format: 'A4',
-                printBackground: true
+            const filePath = path.resolve(process.cwd(), 'pdfs', `${name}.html`);
+            console.log(filePath);
+            const html = await fs.readFile(filePath, 'utf-8');
+            cache.set(name, html);
+            return html;
+        });
+    };
+
+    export class Component {
+        render() {
+            return attemptAsync(async () => {
+                return '';
             });
-            await browser.close();
-            this.__generated = pdf;
-            return pdf;
-        });
+        }
     }
 
-    save() {
-        return attemptAsync(async () => {
-            const pdf = await this.generate();
-            if (pdf.isErr()) throw new PdfError(pdf.error.message);
-            await fs.writeFile(this.filePath, pdf.value);
-            return pdf;
-        });
+    export class Container extends Component {
+        constructor(public readonly components: (Component | string)[]) {
+            super();
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                let str = '';
+                for (const component of this.components) {
+                    if (typeof component === 'string') {
+                        str += component;
+                    } else {
+                        str += await component.render().unwrap();
+                    }
+                }
+                return str;
+            });
+        }
     }
 
-    get filePath() {
-        return filename(this.name);
+    export class Signatories extends Component {
+        constructor(public readonly data: {
+            ownerName: string;
+            ownerTitle: string;
+            clientName: string;
+            clientTitle: string;
+        }) {
+            super();
+        }
+
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('components/signatories').unwrap();
+                return render(template, this.data);
+            });
+        }
     }
+
+    export class ItemList extends Component {
+        constructor(public readonly data: {
+            showDiscount: boolean;
+            items: {
+                description: string;
+                unitPrice: string;
+                quantity: string;
+                subtotal: string;
+                discount?: string;
+            }[];
+        }) {
+            super();
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('components/item-list').unwrap();
+                return render(template, {
+                    ...this.data,
+                    items: this.data.items.map(i => ({
+                        ...i,
+                        showDiscount: this.data.showDiscount,
+                        discount: i.discount || '',
+                    })),
+                });
+            });
+        }
+    }
+
+    export class InvoiceTerms extends Component {
+        constructor(public readonly data: {
+            invoiceDate: string;
+            ownerName: string;
+            ownerTaxId: string;
+            invoiceNumber: string | number;
+        }) {
+            super();
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('components/invoice-terms').unwrap();
+                return render(template, this.data);
+            });
+        }
+    }
+
+    export class InvoiceTotals extends Component {
+        constructor(public readonly data: {
+            subtotalAmount: string;
+            showDiscount: boolean;
+            discountRate: string;
+            discountAmount: string;
+            taxRate: string;
+            taxAmount: string;
+            total: string;
+        }) {
+            super();
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('components/invoice-totals').unwrap();
+                return render(template, this.data);
+            });
+        }
+    }
+
+    export class InvoiceQuoteTitle extends Component {
+        constructor(public readonly data: {
+            title: string;
+            ownerName: string;
+            ownerEmail: string;
+            ownerPhone: string;
+        }) {
+            super();
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('components/title').unwrap();
+                return render(template, this.data);
+            });
+        }
+    }
+
+    export class InvoiceQuoteDescription extends Component {
+        constructor(public readonly data: {
+            type: 'Invoice' | 'Quote';
+            client: string;
+            description: string;
+            date: string;
+            number: string | number;
+        }) {
+            super();
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('components/description').unwrap();
+                return render(template, this.data);
+            });
+        }
+    }
+
+    export class Page {
+        constructor(public readonly content: string | Component) {}
+    }
+
+    export class Template {
+        constructor(public readonly name: string) {}
+
+        public readonly pages: Page[] = [];
+
+        addPage(content: string | Component) {
+            this.pages.push(new Page(content));
+            return this;
+        }
+
+        render() {
+            return attemptAsync(async () => {
+                const template = await openHTML('template').unwrap();
+                return render(template, {
+                    pages: await Promise.all(this.pages.map(async (p, i, a) => ({
+                        page: {
+                            content: p.content instanceof Component ? await p.content.render().unwrap() : p.content,
+                            pageNumber: i + 1,
+                            totalPages: a.length,
+                        }
+                    }))),
+                }, {
+                    root: path.resolve(process.cwd(), 'pdfs'),
+                });
+            });
+        }
+
+        save() {
+            return attemptAsync(async () => {
+                const html = await this.render().unwrap();
+                const filePath = path.resolve(process.cwd(), 'static', 'uploads', `${this.name}.pdf`);
+
+                const browser = await puppeteer.launch();
+                const page = await browser.newPage();
+                await page.setContent(html, { waitUntil: 'networkidle2' });
+                const pdf = await page.pdf({
+                    format: 'A4',
+                    printBackground: true,
+                });
+                await browser.close();
+
+                fs.writeFile(filePath, pdf);
+            });
+        }
+    }
+
+
+    export const LINE = `<div class="line"></div>`;
 }

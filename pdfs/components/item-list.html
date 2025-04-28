@@ -1,0 +1,42 @@
+<style>
+          table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        color: var(--primary);
+      }
+      td, th {
+        padding: 8px;
+        border-bottom: 1px solid #ccc;
+      }
+</style>
+
+<div class="row">
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align: left;">Description</th>
+                <th style="text-align: right;">Unit Price</th>
+                <th style="text-align: right;">Quantity</th>
+                <if id="showDiscount">
+                    <th style="text-align: right;">Discount</th>
+                </if>
+                <th style="text-align: right;">Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            <repeat id="items">
+                <tr>
+                    <td style="text-align: left;">{{ description }}</td>
+                    <td style="text-align: right;">{{ unitPrice }}</td>
+                    <td style="text-align: right;">{{ quantity }}</td>
+                    <if id="showDiscount">
+                        <td style="text-align: right;">{{ discount }}</td>
+                    </if>
+                    <td style="text-align: right;">{{ subtotal }}</td>
+                </tr>
+            </repeat>
+        </tbody>
+    </table>
+</div>

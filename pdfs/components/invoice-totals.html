@@ -1,0 +1,24 @@
+<style>
+        .total, .tax, .subtotal, .discount {
+        font-size: 18px;
+        font-weight: bold;
+        text-align: right;
+        margin-top: 10px;
+      }
+      .grand-total {
+        font-size: 32px;
+        font-weight: bold;
+        text-align: right;
+        margin-top: 20px;
+        /* color: var(--primary); */
+      }
+</style>
+
+<div class="row">
+  <div class="subtotal">Subtotal: {{ subtotalAmount }}</div>
+  <if id="showDiscount">
+      <div class="discount">Discount ({{ discountRate }}): {{ discountAmount }}</div>
+  </if>
+  <div class="tax">Tax ({{ taxRate }}): {{ taxAmount }}</div>
+  <div class="grand-total">Total Due: {{ total }}</div>
+</div>

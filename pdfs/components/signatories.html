@@ -1,0 +1,43 @@
+<style>
+    	  .signatories {
+		display: flex;
+		justify-content: space-between;
+	}
+    .signatory {
+		font-size: 12px;
+		color: #555;
+		line-height: 1.2;
+	  }
+	  .signatory strong {
+		color: #000;
+	  }
+	  .signatory .signature {
+		border-top: 1px solid #000;
+		width: 300px;
+		margin-top: 40px;
+	  }
+	  .signatory .name {
+		margin-top: 5px;
+	  }
+	  .signatory .title {
+		font-size: 10px;
+	  }
+</style>
+
+<div class="row">
+	<div class="signatories">
+		<div class="signatory">
+			<p><strong>Authorized Signature:</strong></p>
+			<div class="signature"></div>
+			<div class="name">{{ ownerName }}</div>
+			<div class="title">{{ ownerTitle }}</div>
+		</div>
+	
+		<div class="signatory">
+			<p><strong>Client Signature:</strong></p>
+			<div class="signature"></div>
+			<div class="name">{{ clientName }}</div>
+			<div class="title">{{ clientTitle }}</div>
+		</div>
+	</div>
+</div>
