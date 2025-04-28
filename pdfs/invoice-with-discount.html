@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{{ invoiceOrQuote }}</title>
+    <style>
+      @page {
+        margin: 0;
+        padding: 0;
+        size: A4;
+      }
+      @media print, screen {
+        body {
+          margin: 0;
+          padding: 0;
+        }
+      }
+      .header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 80px;
+        background-color: var(--primary);
+        color: white;
+        z-index: 1000;
+      }
+      .content {
+        margin-top: 100px; /* Push content below header */
+      }
+      .page {
+        page-break-before: always;
+        break-before: page;
+        padding-top: 20px;
+      }
+      .page:first-child {
+        page-break-before: auto;
+        break-before: auto;
+      }
+      :root {
+        --primary: #4285f4;
+        --secondary: #db4437;
+        --tertiary: #f4b400;
+      }
+      body {
+        margin: 40px;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        color: #000;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 20px;
+      }
+      .col {
+        flex: 1;
+      }
+      .text-end {
+        text-align: right;
+      }
+      .invoice-title {
+        font-size: 48px;
+        font-weight: bold;
+        margin-bottom: 20px;
+      }
+      .section-title {
+        font-weight: bold;
+        color: #4285f4;
+        font-size: 14px;
+        margin-bottom: 5px;
+      }
+      .section-content {
+        font-weight: bold;
+        font-size: 16px;
+        margin-bottom: 20px;
+      }
+      .section-content-description {
+        font-size: 14px;
+        color: #666;
+      }
+      .line {
+        border-top: 1px solid #ccc;
+        margin: 20px 0;
+      }
+      .small-text {
+        font-size: 12px;
+        color: #333;
+      }
+      .total, .tax, .subtotal {
+        font-size: 18px;
+        font-weight: bold;
+        text-align: right;
+        margin-top: 10px;
+      }
+      .grand-total {
+        font-size: 32px;
+        font-weight: bold;
+        text-align: right;
+        margin-top: 20px;
+        color: var(--primary);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        color: var(--primary);
+      }
+      td, th {
+        padding: 8px;
+        border-bottom: 1px solid #ccc;
+      }
+      .terms {
+        margin-top: 40px;
+        font-size: 12px;
+        color: #555;
+        line-height: 1.5;
+      }
+      .terms strong {
+        color: #000;
+      }
+	  
+	  .signatory {
+		font-size: 12px;
+		color: #555;
+		line-height: 1.5;
+	  }
+	  .signatory strong {
+		color: #000;
+	  }
+	  .signatory .signature {
+		border-top: 1px solid #000;
+		width: 300px;
+		margin-top: 40px;
+	  }
+	  .signatory .name {
+		margin-top: 5px;
+	  }
+	  .signatory .title {
+		font-size: 10px;
+	  }
+	  .signatories {
+		display: flex;
+		justify-content: space-between;
+	}
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header"></div>
+
+      <div class="content">
+        <div class="row">
+          <div class="col">
+            <div class="invoice-title">{{ invoiceOrQuote }}</div>
+          </div>
+          <div class="col text-end">
+            <div class="fw-bold">{{ ownerName }}</div>
+            <div class="small-text">{{ ownerEmail }}</div>
+            <div class="small-text">{{ ownerPhone }}</div>
+          </div>
+        </div>
+
+        <div class="line"></div>
+
+        <div class="row">
+          <div class="col">
+            <div class="section-title">{{ invoiceOrQuote }} For:</div>
+            <div class="section-content">{{ client }}</div>
+            <div class="section-content-description">{{ description }}</div>
+          </div>
+          <div class="col text-end">
+            <div class="section-title">{{ invoiceOrQuote }}#</div>
+            <div>{{ invoiceNumber }}</div>
+            <div class="section-title" style="margin-top: 10px;">Date</div>
+            <div>{{ date }}</div>
+          </div>
+        </div>
+
+        <div class="line"></div>
+
+        <div class="row">
+          <div class="col">
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Description</th>
+                  <th style="text-align: right;">Unit Price</th>
+                  <th style="text-align: right;">Quantity</th>
+                  <th style="text-align: right;">Discount</th>
+                  <th style="text-align: right;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                <repeat id="items">
+                  <tr>
+                    <td style="text-align: left;">{{ description }}</td>
+                    <td style="text-align: right;">{{ unitPrice }}</td>
+                    <td style="text-align: right;">{{ quantity }}</td>
+                    <td style="text-align: right;">{{ discount }}</td>
+                    <td style="text-align: right;">{{ subtotal }}</td>
+                  </tr>
+                </repeat>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+
+        <div class="subtotal">Subtotal: {{ subtotalAmount }}</div>
+        <div class="tax">Tax ({{ taxRate }}): {{ taxAmount }}</div>
+        <div class="grand-total">Total Due: {{ total }}</div>
+
+        <div class="terms">
+          <p><strong>Payment Terms:</strong> Payment is due within 30 days of the invoice date. Accepted payment methods: Bank Transfer, Check, Credit Card. Please include the invoice number with your payment.</p>
+          <p><strong>Late Payment:</strong> A late fee of 5% may be charged for payments not received within 30 days.</p>
+          <p><strong>Ownership:</strong> Ownership of goods/services remains with {{ ownerName }} until full payment is received.</p>
+          <p><strong>Refund Policy:</strong> All sales are final unless otherwise specified in writing. Refunds are issued at the discretion of {{ ownerName }}.</p>
+          <p><strong>Tax Information:</strong> Tax ID Number: {{ ownerTaxId }}.</p>
+        </div>
+		<div class="line"></div>
+
+		<div class="signatories">
+			<div class="signatory">
+				<p><strong>Authorized Signature:</strong></p>
+				<div class="signature"></div>
+				<div class="name">{{ ownerName }}</div>
+				<div class="title">{{ ownerTitle }}</div>
+			</div>
+			<div class="signatory">
+				<p><strong>Client Signature:</strong></p>
+				<div class="signature"></div>
+				<div class="name">{{ client }}</div>
+				<div class="title">{{ clientTitle }}</div>
+			</div>
+		</div>
+      </div>
+    </div>
+  </body>
+</html>
