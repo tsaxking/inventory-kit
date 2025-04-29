@@ -4,6 +4,7 @@ import { Struct } from 'drizzle-struct/front-end';
 
 export namespace Rental {
     export enum ProjectStatus {
+        CONCEPT = 'concept',
 		PLANNING = 'planning',
 		CONFIRMED = 'confirmed',
 		INVOICED = 'invoiced',
@@ -37,6 +38,23 @@ export namespace Rental {
         browser: browser,
     });
 
+    export const ProjectItem = new Struct({
+        name: 'project_items',
+        structure: {
+            projectId: 'string',
+            type: 'string',
+            itemId: 'string',
+            name: 'string',
+            description: 'string',
+            rentPrice: 'number',
+            status: 'string',
+            quantity: 'number',
+            discount: 'number',
+        },
+        socket: sse,
+        browser: browser,
+    });
+
     export const Quote = new Struct({
         name: 'quotes',
         structure: {
@@ -59,62 +77,6 @@ export namespace Rental {
             dueDate: 'string',
             date: 'string',
             status: 'string', // InvoiceStatus
-        },
-        socket: sse,
-        browser: browser,
-    });
-
-    export const QuoteItem = new Struct({
-        name: 'quote_items',
-        structure: {
-            quoteId: 'string',
-            itemId: 'string',
-            groupId: 'string',
-            name: 'string',
-            description: 'string',
-            price: 'number',
-            discount: 'number',
-            quantity: 'number',
-        },
-        socket: sse,
-        browser: browser,
-    });
-
-    export const InvoiceItem = new Struct({
-        name: 'invoice_items',
-        structure: {
-            invoiceId: 'string',
-            itemId: 'string',
-            groupId: 'string',
-            name: 'string',
-            description: 'string',
-            price: 'number',
-            discount: 'number',
-            quantity: 'number',
-        },
-        socket: sse,
-        browser: browser,
-    });
-
-    export const InvoicePdfs = new Struct({
-        name: 'invoice_pdfs',
-        structure: {
-            invoiceId: 'string',
-            name: 'string',
-            status: 'string', // InvoiceStatus
-            opened: 'boolean',
-        },
-        socket: sse,
-        browser: browser,
-    });
-
-    export const ProjectPdfs = new Struct({
-        name: 'project_pdfs',
-        structure: {
-            projectId: 'string',
-            name: 'string',
-            status: 'string', // ProjectStatus
-            opened: 'boolean',
         },
         socket: sse,
         browser: browser,

@@ -1,8 +1,16 @@
 import { browser } from "$app/environment";
 import { sse } from "$lib/utils/sse";
-import { Struct } from "drizzle-struct/front-end";
+import { DataArr, Struct } from "drizzle-struct/front-end";
 
 export namespace Inventory {
+    export enum ItemStatus {
+		READY = 'ready',
+		DAMAGED = 'damaged',
+		LOST = 'lost',
+		SOLD = 'sold',
+		RENTED = 'rented',
+	}
+
     export const BulkItem = new Struct({
         name: 'bulk_items',
         structure: {
@@ -11,7 +19,7 @@ export namespace Inventory {
             model: 'string',
             name: 'string',
             description: 'string',
-            newCost: 'number',
+            price: 'number',
             boughtFor: 'number',
             image: 'string',
             rentable: 'boolean',
@@ -34,7 +42,7 @@ export namespace Inventory {
             serial: 'string',
             name: 'string',
             description: 'string',
-            newCost: 'number',
+            price: 'number',
             boughtFor: 'number',
             image: 'string',
             rentable: 'boolean',
@@ -47,12 +55,14 @@ export namespace Inventory {
     export const Group = new Struct({
         name: 'groups',
         structure: {
+            customId: 'string',
             name: 'string',
             description: 'string',
             image: 'string',
             price: 'number',
             rentable: 'boolean',
             rentPrice: 'number',
+            status: 'string',
         },
         socket: sse,
         browser: browser,
@@ -66,5 +76,10 @@ export namespace Inventory {
         },
         socket: sse,
         browser: browser,
+    });
+
+    export const getAllNonGroupItems = () => SerializedItem.query('non-group', {}, {
+        asStream: false,
+        satisfies: () => false,
     });
 }

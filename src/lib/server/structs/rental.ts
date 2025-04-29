@@ -8,6 +8,7 @@ const { COMPANY_TAX_ID } = process.env;
 
 export namespace Rental {
 	export enum ProjectStatus {
+        CONCEPT = 'concept',
 		PLANNING = 'planning',
 		CONFIRMED = 'confirmed',
 		INVOICED = 'invoiced',
@@ -314,5 +315,6 @@ export namespace Rental {
 }
 
 export const _project = Rental.Project.table;
+export const _projectItem = Rental.ProjectItem.table;
 export const _quote = Rental.Quote.table;
 export const _invoice = Rental.Invoice.table;
